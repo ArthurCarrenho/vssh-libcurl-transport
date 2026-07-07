@@ -3,8 +3,13 @@ import type {
   TransferrableResponse,
   ProxyTransport,
 } from "@mercuryworkshop/proxy-transports";
+// vssh fork: import the vendored, patched single-file build of libcurl.js (lib/
+// libcurl_full.mjs) instead of the upstream "libcurl.js/bundled" package. That build
+// includes the CURLOPT_SSL_VERIFYPEER/VERIFYHOST opt-out (the "insecure" option below)
+// and is produced by the ArthurCarrenho/vssh-libcurl.js fork's CI. esbuild inlines this
+// file (with its embedded WASM) into dist/, so the runtime never resolves libcurl.js.
 // @ts-ignore
-import { libcurl } from "libcurl.js/bundled";
+import { libcurl } from "../lib/libcurl_full.mjs";
 
 export type LibcurlClientOptions = {
   wisp: string;
@@ -12,6 +17,9 @@ export type LibcurlClientOptions = {
   proxy?: string;
   transport?: string;
   connections?: Array<number>;
+  // vssh fork: skip TLS peer/host verification (self-signed certs on internal/dev
+  // servers). Applies to HTTP(S) requests via HTTPSession; not to WebSocket connections.
+  insecure?: boolean;
 };
 export default class LibcurlClient implements ProxyTransport {
   session: any;
@@ -19,12 +27,14 @@ export default class LibcurlClient implements ProxyTransport {
   proxy?: string;
   transport?: string;
   connections?: Array<number>;
+  insecure?: boolean;
 
   constructor(options: LibcurlClientOptions) {
     this.wisp = options.wisp ?? options.websocket;
     this.transport = options.transport;
     this.proxy = options.proxy;
     this.connections = options.connections;
+    this.insecure = options.insecure;
     if (!this.wisp.endsWith("/")) {
       throw new TypeError(
         "The Websocket URL must end with a trailing forward slash."
@@ -60,6 +70,7 @@ export default class LibcurlClient implements ProxyTransport {
     libcurl.set_websocket(this.wisp);
     this.session = new libcurl.HTTPSession({
       proxy: this.proxy,
+      insecure: this.insecure,
     });
 
     if (this.connections) this.session.set_connections(...this.connections);
