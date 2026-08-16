@@ -86,17 +86,33 @@ jobs:
           name: packaged-libcurl-transport
           path: .
 
-      - name: Release to GitHub
+      - name: SHA curto para a tag do build
+        id: sha
+        run: echo "curto=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # vssh fork: **a `latest` está CONGELADA, e é por isso que não há passo escrevendo nela.**
+      #
+      # O que estava aqui era um `ncipollo/release-action` com `tag: latest`, `allowUpdates: true` e
+      # `removeArtifacts: true` — ou seja, todo push em master apagava os assets e subia os novos sob
+      # o mesmo nome de arquivo. O comentário do job `publish` logo abaixo já dizia, com todas as
+      # letras, que "republicar bytes diferentes sob o mesmo nome quebra o `integrity` do lockfile de
+      # quem consome". Dizia, e este passo fazia.
+      #
+      # A `latest` continua existindo e continua servindo o 2.0.6 que produção instalou. Só não
+      # recebe mais nada. Apagá-la é outra decisão, e depende de não haver mais servidor apontando
+      # para lá.
+      - name: Release imutável deste build
         uses: ncipollo/release-action@v1
         with:
-          name: Continuous Build
-          tag: latest
-          commit: master
+          name: "transport ${{ steps.sha.outputs.curto }}"
+          # Tag que não se move: o run dá ordem legível, o SHA diz de que código o tarball saiu. É
+          # a única URL deste repositório que dá para gravar num lockfile sem torcer.
+          tag: "transport-${{ github.run_number }}-${{ steps.sha.outputs.curto }}"
+          commit: ${{ github.sha }}
           body: "${{ github.event.head_commit.url }} ${{ github.event.head_commit.message }}"
           artifacts: "mercuryworkshop-libcurl-transport-*.tgz"
           prerelease: true
-          allowUpdates: true
-          removeArtifacts: true
+          makeLatest: false
 
   # vssh fork: só o upstream publica no npm. Este é um FORK, e o pacote se chama
   # @mercuryworkshop/libcurl-transport — publicar dali empurraria um build nosso para o nome deles.
